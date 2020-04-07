@@ -145,19 +145,19 @@ void FIRCLSSignalCheckHandlers(void) {
 }
 
 void FIRCLSSignalSafeRemoveHandlers(bool includingAbort) {
-  for (int i = 0; i < FIRCLSSignalCount; ++i) {
+  FIRCLSSignalEnumerateHandledSignals(^(int idx, int signal) {
     struct sigaction sa;
 
-    if (!includingAbort && (FIRCLSFatalSignals[i] == SIGABRT)) {
-      continue;
+    if (!includingAbort && (signal == SIGABRT)) {
+      return;
     }
 
     sa.sa_handler = SIG_DFL;
     sigemptyset(&sa.sa_mask);
 
-    if (sigaction(FIRCLSFatalSignals[i], &sa, NULL) != 0)
-      FIRCLSSDKLog("Unable to set default handler for %d (%s)\n", i, strerror(errno));
-  }
+    if (sigaction(signal, &sa, NULL) != 0)
+      FIRCLSSDKLog("Unable to set default handler for %d (%s)\n", signal, strerror(errno));
+  });
 }
 
 bool FIRCLSSignalSafeInstallPreexistingHandlers(FIRCLSSignalReadContext *roContext) {
