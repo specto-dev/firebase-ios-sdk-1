@@ -160,7 +160,10 @@ void FIRCLSSignalSafeRemoveHandlers(bool includingAbort) {
   });
 }
 
-bool FIRCLSSignalSafeInstallPreexistingHandlers(FIRCLSSignalReadContext *roContext) {
+bool FIRCLSSignalSafeInstallPreexistingHandlers(FIRCLSSignalReadContext *roContext,
+                                                const int signal,
+                                                siginfo_t *info,
+                                                void *uapVoid) {
   __block bool success;
 
   FIRCLSSignalSafeRemoveHandlers(true);
@@ -180,14 +183,24 @@ bool FIRCLSSignalSafeInstallPreexistingHandlers(FIRCLSSignalReadContext *roConte
 
   // re-install the original handlers, if any
   success = true;
-  FIRCLSSignalEnumerateHandledSignals(^(int idx, int signal) {
+  FIRCLSSignalEnumerateHandledSignals(^(int idx, int currentSignal) {
     if (roContext->originalActions[idx].sa_sigaction == NULL) {
       return;
     }
 
-    if (sigaction(signal, &roContext->originalActions[idx], 0) != 0) {
-      FIRCLSSDKLog("Unable to install handler for %d (%s)\n", signal, strerror(errno));
+    if (sigaction(currentSignal, &roContext->originalActions[idx], 0) != 0) {
+      FIRCLSSDKLog("Unable to install handler for %d (%s)\n", currentSignal, strerror(errno));
       success = false;
+    }
+
+    // invoke original handler for current signal
+    if (signal < 0) {
+      return;
+    }
+    if (signal == currentSignal) {
+      void (*const)(int, __siginfo *, void *) previousHandler =
+          roContext->originalActions[idx].sa_sigaction;
+      previousHandler(signal, info, uapVoid);
     }
   });
 
@@ -311,7 +324,8 @@ static void FIRCLSSignalHandler(int signal, siginfo_t *info, void *uapVoid) {
 
   // re-install original handlers
   if (_firclsContext.readonly) {
-    FIRCLSSignalSafeInstallPreexistingHandlers(&_firclsContext.readonly->signal);
+    FIRCLSSignalSafeInstallPreexistingHandlers(& _firclsContext.readonly->signal, signal, info,
+                                               uapVoid);
   }
 
   // restore errno
