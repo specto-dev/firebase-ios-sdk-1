@@ -155,8 +155,9 @@ void FIRCLSSignalSafeRemoveHandlers(bool includingAbort) {
     sa.sa_handler = SIG_DFL;
     sigemptyset(&sa.sa_mask);
 
-    if (sigaction(signal, &sa, NULL) != 0)
+    if (sigaction(signal, &sa, NULL) != 0) {
       FIRCLSSDKLog("Unable to set default handler for %d (%s)\n", signal, strerror(errno));
+    }
   });
 }
 
@@ -324,7 +325,7 @@ static void FIRCLSSignalHandler(int signal, siginfo_t *info, void *uapVoid) {
 
   // re-install original handlers
   if (_firclsContext.readonly) {
-    FIRCLSSignalSafeInstallPreexistingHandlers(& _firclsContext.readonly->signal, signal, info,
+    FIRCLSSignalSafeInstallPreexistingHandlers(&_firclsContext.readonly->signal, signal, info,
                                                uapVoid);
   }
 
