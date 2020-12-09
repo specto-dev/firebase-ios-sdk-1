@@ -32,8 +32,6 @@ device, and it is completely free.
     base_dir + 'Sources/**/*.[mh]',
     'Interop/Analytics/Public/*.h',
     'FirebaseCore/Sources/Private/*.h',
-    'Firebase/InstanceID/Private/*.h',
-    'Firebase/InstanceID/Public/*.h',
     'FirebaseInstallations/Source/Library/Private/*.h',
   ]
   s.requires_arc = [
