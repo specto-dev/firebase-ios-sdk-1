@@ -17,8 +17,8 @@
 #ifndef FIRESTORE_CORE_SRC_MODEL_OBJECT_VALUE_H_
 #define FIRESTORE_CORE_SRC_MODEL_OBJECT_VALUE_H_
 
-#include <string>
 #include <ostream>
+#include <string>
 #include <unordered_map>
 
 #include "Firestore/Protos/nanopb/google/firestore/v1/document.nanopb.h"
