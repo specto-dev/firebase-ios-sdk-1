@@ -15,14 +15,14 @@
  */
 
 #include "Firestore/core/src/model/object_value.h"
+
+#include <set>
+
+#include "Firestore/Protos/nanopb/google/firestore/v1/document.nanopb.h"
 #include "Firestore/core/src/model/field_path.h"
 #include "Firestore/core/src/model/values.h"
 #include "Firestore/core/src/nanopb/message.h"
 #include "Firestore/core/src/nanopb/nanopb_util.h"
-#include "object_value.h"
-
-#include <Firestore/Protos/nanopb/google/firestore/v1/document.nanopb.h>
-#include <set>
 
 namespace firebase {
 namespace firestore {

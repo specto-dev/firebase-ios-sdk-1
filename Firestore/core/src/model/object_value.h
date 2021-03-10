@@ -39,7 +39,7 @@ class MutableObjectValue {  // TODO(mrschmidt): Rename to ObjectValue
     HARD_ASSERT(
         value.which_value_type == google_firestore_v1_Value_map_value_tag,
         "ObjectValues should be backed by a MapValue");
-  };
+  }
 
   /** Recursively extracts the FieldPaths that are set in this ObjectValue. */
   FieldMask ToFieldMask() const;
