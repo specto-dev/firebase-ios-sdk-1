@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "Firestore/core/src/model/value.h"
+#include "Firestore/core/src/model/values.h"
 #include "Firestore/core/src/model/database_id.h"
 #include "Firestore/core/src/model/field_value.h"
 #include "Firestore/core/src/remote/serializer.h"
@@ -28,7 +28,6 @@
 namespace firebase {
 namespace firestore {
 namespace model {
-namespace {
 
 using testutil::Array;
 using testutil::BlobValue;
@@ -39,20 +38,27 @@ using testutil::time_point;
 using testutil::Value;
 using util::ComparisonResult;
 
+namespace {
+
 double ToDouble(uint64_t value) {
   return absl::bit_cast<double>(value);
 }
 
 const uint64_t kNanBits = 0x7fff000000000000ULL;
 
-const time_point kDate1 = testutil::MakeTimePoint(2016, 5, 20, 10, 20, 0);
-const Timestamp kTimestamp1{1463739600, 0};
+}  // namespace
 
-const time_point kDate2 = testutil::MakeTimePoint(2016, 10, 21, 15, 32, 0);
-const Timestamp kTimestamp2{1477063920, 0};
+static time_point kDate1 = testutil::MakeTimePoint(2016, 5, 20, 10, 20, 0);
+static Timestamp kTimestamp1{1463739600, 0};
 
-class ValueTest : public ::testing::Test {
+static time_point kDate2 = testutil::MakeTimePoint(2016, 10, 21, 15, 32, 0);
+static Timestamp kTimestamp2{1477063920, 0};
+
+class ValuesTest : public ::testing::Test {
  public:
+  ValuesTest() : serializer(DbId()) {
+  }
+
   template <typename T>
   google_firestore_v1_Value Wrap(T input) {
     model::FieldValue fv = Value(input);
@@ -60,21 +66,20 @@ class ValueTest : public ::testing::Test {
   }
 
   template <typename... Args>
-  google_firestore_v1_Value WrapObject(Args&&... key_value_pairs) {
-    FieldValue fv =
-        testutil::WrapObject(std::forward<Args>(key_value_pairs)...);
+  google_firestore_v1_Value WrapObject(Args... key_value_pairs) {
+    FieldValue fv = testutil::WrapObject((key_value_pairs)...);
     return serializer.EncodeFieldValue(fv);
   }
 
   template <typename... Args>
-  google_firestore_v1_Value WrapArray(Args&&... values) {
+  google_firestore_v1_Value WrapArray(Args... values) {
     std::vector<model::FieldValue> contents{Value(values)...};
     FieldValue fv = FieldValue::FromArray(std::move(contents));
     return serializer.EncodeFieldValue(fv);
   }
 
-  google_firestore_v1_Value WrapReference(const DatabaseId& database_id,
-                                          const DocumentKey& key) {
+  google_firestore_v1_Value WrapReference(DatabaseId database_id,
+                                          DocumentKey key) {
     google_firestore_v1_Value result{};
     result.which_value_type = google_firestore_v1_Value_reference_value_tag;
     result.reference_value =
@@ -96,50 +101,44 @@ class ValueTest : public ::testing::Test {
     groups.emplace_back(group);
   }
 
-  void VerifyEquality(std::vector<google_firestore_v1_Value>& left,
-                      std::vector<google_firestore_v1_Value>& right,
-                      bool expected_equals) {
+  void VerifyEquals(std::vector<google_firestore_v1_Value>& group) {
+    for (size_t i = 0; i < group.size(); ++i) {
+      for (size_t j = 0; j < group.size(); ++j) {
+        EXPECT_TRUE(Values::Equals(group[i], group[j]));
+      }
+    }
+  }
+
+  void VerifyNotEquals(std::vector<google_firestore_v1_Value>& left,
+                       std::vector<google_firestore_v1_Value>& right) {
     for (const auto& val1 : left) {
       for (const auto& val2 : right) {
-        EXPECT_EQ(expected_equals, val1 == val2)
-            << "Equality check failed for '" << CanonicalId(val1) << "' and '"
-            << CanonicalId(val2) << "' (expected " << expected_equals << ")";
+        EXPECT_FALSE(Values::Equals(val1, val2));
       }
     }
   }
 
   void VerifyOrdering(std::vector<google_firestore_v1_Value>& left,
                       std::vector<google_firestore_v1_Value>& right,
-                      ComparisonResult expected_result) {
+                      ComparisonResult cmp) {
     for (const auto& val1 : left) {
       for (const auto& val2 : right) {
-        EXPECT_EQ(expected_result, Compare(val1, val2))
-            << "Order check failed for '" << CanonicalId(val1) << "' and '"
-            << CanonicalId(val2) << "' (expected "
-            << static_cast<int>(expected_result) << ")";
-        EXPECT_EQ(util::ReverseOrder(expected_result), Compare(val2, val1))
-            << "Reverse order check failed for '" << CanonicalId(val1)
-            << "' and '" << CanonicalId(val2) << "' (expected "
-            << static_cast<int>(util::ReverseOrder(expected_result)) << ")";
+        EXPECT_EQ(cmp, Values::Compare(val1, val2));
       }
     }
   }
 
   void VerifyCanonicalId(const google_firestore_v1_Value& value,
                          const std::string& expected_canonical_id) {
-    std::string actual_canonical_id = CanonicalId(value);
+    const std::string& actual_canonical_id = Values::CanonicalId(value);
     EXPECT_EQ(expected_canonical_id, actual_canonical_id);
   }
 
  private:
-  remote::Serializer serializer{DbId()};
+  remote::Serializer serializer;
 };
 
-TEST_F(ValueTest, Equality) {
-  // Create a matrix that defines an equality group. The outer vector has
-  // multiple rows and each row can have an arbitrary number of entries.
-  // The elements within a row must equal each other, but not be equal
-  // to all elements of other rows.
+TEST_F(ValuesTest, Equality) {
   std::vector<std::vector<google_firestore_v1_Value>> equals_group;
 
   Add(equals_group, Wrap(nullptr), Wrap(nullptr));
@@ -159,7 +158,6 @@ TEST_F(ValueTest, Equality) {
   Add(equals_group, Wrap(BlobValue(0, 1)));
   Add(equals_group, Wrap("string"), Wrap("string"));
   Add(equals_group, Wrap("strin"));
-  Add(equals_group, Wrap(std::string("strin\0", 6)));
   // latin small letter e + combining acute accent
   Add(equals_group, Wrap("e\u0301b"));
   // latin small letter e with acute accent
@@ -189,17 +187,16 @@ TEST_F(ValueTest, Equality) {
 
   for (size_t i = 0; i < equals_group.size(); ++i) {
     for (size_t j = i; j < equals_group.size(); ++j) {
-      VerifyEquality(equals_group[i], equals_group[j],
-                     /* expected_equals= */ i == j);
+      if (i == j) {
+        VerifyEquals(equals_group[i]);
+      } else {
+        VerifyNotEquals(equals_group[i], equals_group[j]);
+      }
     }
   }
 }
 
-TEST_F(ValueTest, Ordering) {
-  // Create a matrix that defines a comparison group. The outer vector has
-  // multiple rows and each row can have an arbitrary number of entries.
-  // The elements within a row must compare equal to each other, but order after
-  // all elements in previous groups and before all elements in later groups.
+TEST_F(ValuesTest, Ordering) {
   std::vector<std::vector<google_firestore_v1_Value>> comparison_groups;
 
   // null first
@@ -237,7 +234,6 @@ TEST_F(ValueTest, Ordering) {
   Add(comparison_groups, Wrap("\001\ud7ff\ue000\uffff"));
   Add(comparison_groups, Wrap("(╯°□°）╯︵ ┻━┻"));
   Add(comparison_groups, Wrap("a"));
-  Add(comparison_groups, Wrap(std::string("abc\0 def", 8)));
   Add(comparison_groups, Wrap("abc def"));
   // latin small letter e + combining acute accent + latin small letter b
   Add(comparison_groups, Wrap("e\u0301b"));
@@ -289,37 +285,38 @@ TEST_F(ValueTest, Ordering) {
 
   for (size_t i = 0; i < comparison_groups.size(); ++i) {
     for (size_t j = i; j < comparison_groups.size(); ++j) {
-      VerifyOrdering(
-          comparison_groups[i], comparison_groups[j],
-          i == j ? ComparisonResult::Same : ComparisonResult::Ascending);
+      if (i == j) {
+        VerifyOrdering(comparison_groups[i], comparison_groups[i],
+                       ComparisonResult::Same);
+      } else {
+        VerifyOrdering(comparison_groups[i], comparison_groups[j],
+                       ComparisonResult::Ascending);
+      }
     }
   }
 }
 
-TEST_F(ValueTest, CanonicalId) {
+TEST_F(ValuesTest, CanonicalId) {
   VerifyCanonicalId(Wrap(nullptr), "null");
   VerifyCanonicalId(Wrap(true), "true");
   VerifyCanonicalId(Wrap(false), "false");
   VerifyCanonicalId(Wrap(1), "1");
-  VerifyCanonicalId(Wrap(1.0), "1.0");
+  VerifyCanonicalId(Wrap(1.0), "1.000000");
   VerifyCanonicalId(Wrap(Timestamp(30, 1000)), "time(30,1000)");
   VerifyCanonicalId(Wrap("a"), "a");
-  VerifyCanonicalId(Wrap(std::string("a\0b", 3)), std::string("a\0b", 3));
   VerifyCanonicalId(Wrap(BlobValue(1, 2, 3)), "010203");
   VerifyCanonicalId(WrapReference(DbId("p1/d1"), Key("c1/doc1")), "c1/doc1");
-  VerifyCanonicalId(Wrap(GeoPoint(30, 60)), "geo(30.0,60.0)");
+  VerifyCanonicalId(Wrap(GeoPoint(30, 60)), "geo(30.000000,60.000000)");
   VerifyCanonicalId(WrapArray(1, 2, 3), "[1,2,3]");
   VerifyCanonicalId(WrapObject("a", 1, "b", 2, "c", "3"), "{a:1,b:2,c:3}");
   VerifyCanonicalId(WrapObject("a", Array("b", Map("c", GeoPoint(30, 60)))),
-                    "{a:[b,{c:geo(30.0,60.0)}]}");
+                    "{a:[b,{c:geo(30.000000,60.000000)}]}");
 }
 
-TEST_F(ValueTest, CanonicalIdIgnoresSortOrder) {
+TEST_F(ValuesTest, CanonicalIdIgnoresSortOrder) {
   VerifyCanonicalId(WrapObject("a", 1, "b", 2, "c", "3"), "{a:1,b:2,c:3}");
   VerifyCanonicalId(WrapObject("c", 3, "b", 2, "a", "1"), "{a:1,b:2,c:3}");
 }
-
-}  // namespace
 
 }  // namespace model
 }  // namespace firestore
