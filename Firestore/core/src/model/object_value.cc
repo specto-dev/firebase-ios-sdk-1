@@ -105,19 +105,14 @@ void MutableObjectValue::Set(const model::FieldPath& path,
                                   &entry->value);
         entry->value.which_value_type = google_firestore_v1_Value_map_value_tag;
       }
-
       parent = &entry->value.map_value;
     } else {
-      ResizeMapValue(
-          parent, parent->fields_count + 1,
-          [](_google_firestore_v1_MapValue_FieldsEntry*) { return true; });
-
-      _google_firestore_v1_MapValue_FieldsEntry* last_entry =
-          &parent->fields[parent->fields_count - 1];
-      last_entry->key = nanopb::MakeBytesArray(segment);
-      last_entry->value.which_value_type =
+      _google_firestore_v1_MapValue_FieldsEntry new_entry{
+          nanopb::MakeBytesArray(segment), {}};
+      new_entry.value.which_value_type =
           google_firestore_v1_Value_map_value_tag;
-      parent = &last_entry->value.map_value;
+      AddToMap(parent, new_entry);
+      parent = &new_entry.value.map_value;
     }
   }
 
@@ -130,14 +125,9 @@ void MutableObjectValue::Set(const model::FieldPath& path,
     entry->value = value;
   } else {
     // Add a new entry
-    pb_size_t existing_count = parent->fields_count;
-    ResizeMapValue(
-        parent, existing_count + 1,
-        [](_google_firestore_v1_MapValue_FieldsEntry*) { return true; });
-
-    parent->fields[existing_count].key =
-        nanopb::MakeBytesArray(path.last_segment());
-    parent->fields[existing_count].value = value;
+    _google_firestore_v1_MapValue_FieldsEntry new_entry{
+        nanopb::MakeBytesArray(path.last_segment()), value};
+    AddToMap(parent, new_entry);
   }
 }
 
@@ -173,41 +163,44 @@ void MutableObjectValue::Delete(const FieldPath& path) {
       FindMapEntry(*parent, path.last_segment());
 
   if (entry) {
-    ResizeMapValue(
-        parent, parent->fields_count - 1,
-        [entry](google_firestore_v1_MapValue_FieldsEntry* existing_entry) {
-          return existing_entry != entry;
-        });
+    RemoveFromMap(parent, entry);
   }
 }
 
-void MutableObjectValue::ResizeMapValue(
+void MutableObjectValue::AddToMap(
     google_firestore_v1_MapValue* map_value,
-    pb_size_t target_size,
-    const std::function<bool(google_firestore_v1_MapValue_FieldsEntry*)>&
-        filter_fn) const {
-  pb_size_t source_size = map_value->fields_count;
-  _google_firestore_v1_MapValue_FieldsEntry* existing_entries =
+    google_firestore_v1_MapValue_FieldsEntry entry) const {
+  map_value->fields = static_cast<_google_firestore_v1_MapValue_FieldsEntry*>(
+      realloc(map_value->fields,
+              (map_value->fields_count + 1) *
+                  sizeof(_google_firestore_v1_MapValue_FieldsEntry)));
+
+  map_value->fields[map_value->fields_count] = entry;
+  map_value->fields_count += 1;
+}
+
+void MutableObjectValue::RemoveFromMap(
+    google_firestore_v1_MapValue* map_value,
+    google_firestore_v1_MapValue_FieldsEntry* entry) const {
+  _google_firestore_v1_MapValue_FieldsEntry* existing_fields =
       map_value->fields;
 
-  map_value->fields_count = target_size;
-  map_value->fields =
-      nanopb::MakeArray<google_firestore_v1_MapValue_FieldsEntry>(target_size);
-
   for (pb_size_t target_index = 0, source_index = 0;
-       target_index < target_size && source_index < source_size;
-       ++source_index) {
-    if (filter_fn(&existing_entries[source_index])) {
-      map_value->fields[target_index] = existing_entries[source_index];
+       source_index < map_value->fields_count; ++source_index) {
+    if (&existing_fields[source_index] != entry) {
+      existing_fields[target_index] = existing_fields[source_index];
       ++target_index;
     } else {
       nanopb::FreeNanopbMessage(google_firestore_v1_Value_fields,
-                                &existing_entries[source_index]);
+                                &existing_fields[source_index]);
     }
   }
 
-  nanopb::FreeNanopbMessage(google_firestore_v1_MapValue_FieldsEntry_fields,
-                            &existing_entries);
+  map_value->fields = static_cast<_google_firestore_v1_MapValue_FieldsEntry*>(
+      realloc(existing_fields,
+              (map_value->fields_count - 1) *
+                  sizeof(_google_firestore_v1_MapValue_FieldsEntry)));
+  map_value->fields_count -= 1;
 }
 
 _google_firestore_v1_MapValue_FieldsEntry* MutableObjectValue::FindMapEntry(

@@ -97,23 +97,11 @@ class MutableObjectValue {  // TODO(mrschmidt): Rename to ObjectValue
       const google_firestore_v1_MapValue& map_value,
       const std::string& segment);
 
-  /**
-   *  Resizes the field array of the provided map value. The map is resized
-   *  to `target_size` and all values that match `filter_fn` are copied over.
-   *  The result is padded with empty values or truncated if `filter_fn` does
-   *  not produce `target_size`.
-   *
-   *  @param map_value The map whose underlying field array we should resize.
-   *  @param target_size The new sie of the field array.
-   *  @param filter_fn A function that operates on the existing map entries and
-   *  is used to determine whether entries should be copied to the new field
-   * array.
-   */
-  void ResizeMapValue(
-      google_firestore_v1_MapValue* map_value,
-      pb_size_t target_size,
-      const std::function<bool(google_firestore_v1_MapValue_FieldsEntry*)>&
-          filter_fn) const;
+  void AddToMap(google_firestore_v1_MapValue* map_value,
+                google_firestore_v1_MapValue_FieldsEntry entry) const;
+
+  void RemoveFromMap(google_firestore_v1_MapValue* map_value,
+                     google_firestore_v1_MapValue_FieldsEntry* entry) const;
 };
 
 inline bool operator==(const MutableObjectValue& lhs,
